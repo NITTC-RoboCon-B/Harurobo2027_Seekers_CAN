@@ -90,7 +90,7 @@
         <div class="field"><label for="kind">② kind <small>通信の種類・3ビット</small></label><select id="kind"></select><div class="explain" id="kindHelp"></div></div>
         <div class="field"><label for="board">③ board <small>基板番号・4ビット</small></label><select id="board"></select><div class="explain" id="boardHelp"></div></div>
         <div class="field"><label for="device">④ device <small>機器の種類・4ビット</small></label><select id="device"></select><div class="explain" id="deviceHelp"></div></div>
-        <div class="field"><label for="instance">⑤ instance <small>個体番号・4ビット</small></label><select id="instance"></select><div class="explain" id="instanceHelp"></div></div>
+        <div class="field"><label for="instance">⑤ instance <small>個体番号・4ビット（基板×デバイス別）</small></label><select id="instance"></select><div class="explain" id="instanceHelp"></div></div>
         <div class="field"><label for="op">⑥ op <small>操作・8ビット</small></label><select id="op"></select><div class="explain" id="opHelp"></div></div>
         <div class="field"><label for="version">⑦ version <small>仕様の版・4ビット</small></label><select id="version"></select><div class="explain" id="versionHelp"></div></div>
       </div>
@@ -216,7 +216,7 @@
     dropdown.append(trigger,menu);host.append(dropdown);
     let editor=null,input=null,addEditor=null;
     if(['board','device','instance'].includes(select.id)){
-      const edit=document.createElement('button');edit.type='button';edit.className='edit-name';edit.textContent='✎ 名前';edit.title='選択中の表示名を編集';
+      const edit=document.createElement('button');edit.type='button';edit.className='edit-name';edit.textContent='✎ 名前';edit.title=select.id==='instance'?'選択中の名前を、この基板とデバイスの組み合わせに設定':'選択中の表示名を編集';
       editor=document.createElement('div');editor.className='inline-editor hidden';
       input=document.createElement('input');input.type='text';input.maxLength=32;input.setAttribute('aria-label','選択肢の表示名');
       const save=document.createElement('button');save.type='button';save.textContent='保存';
@@ -309,7 +309,7 @@
     if(op.payload==='none'){root.textContent='この操作に送信データはありません（DLC 0）。';return new Uint8Array();}
     if(op.payload==='float'){
       const label=document.createElement('label'); label.htmlFor='floatValue'; label.textContent=`値（${op.unit}）`;
-      const input=document.createElement('input'); input.id='floatValue';input.type='number';input.step='any';input.value=floatValue;input.placeholder=`例：${op.unit==='rad/s'?'1.0':op.unit==='A'?'0.5':op.unit==='rad'?'0.0':'0.25'}`;
+      const input=document.createElement('input'); input.id='floatValue';input.type='text';input.inputMode='decimal';input.autocomplete='off';input.value=floatValue;input.placeholder=`例：${op.unit==='rad/s'?'1.0':op.unit==='A'?'0.5':op.unit==='rad'?'0.0':'0.25'}`;input.setAttribute('aria-label',`値（${op.unit}）。数値を直接入力`);
       const hint=document.createElement('p');hint.className='hint';hint.textContent='IEEE 754 float32、リトルエンディアン、4バイト。NaN・無限大は不可。機器で決めた上限内の値を入力してください。';
       root.append(label,input,hint);
       if(op.v===19){const duty=document.createElement('p');duty.className='hint';duty.textContent='逆転対応ESC：−1〜+1。片方向ESC：0〜+1。対応範囲は接続するESCの設定に合わせてください。';root.append(duty);}
