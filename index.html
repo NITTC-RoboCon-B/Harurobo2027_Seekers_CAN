@@ -26,7 +26,8 @@
     .custom-selects { display:flex; gap:8px; align-items:flex-start; width:100%; position:relative; }
     .dropdown { position:relative; flex:1; min-width:0; }
     .dropdown-trigger { width:100%; min-height:44px; display:flex; justify-content:space-between; align-items:center; gap:12px; padding:8px 12px; border:1px solid #b9c8d0; border-radius:8px; background:white; color:var(--ink); text-align:left; font:inherit; cursor:pointer; }
-    .dropdown-trigger:hover,.dropdown-trigger[aria-expanded="true"] { border-color:var(--blue); background:#f7fcfe; }
+    .dropdown-trigger:hover:not(:disabled),.dropdown-trigger[aria-expanded="true"] { border-color:var(--blue); background:#f7fcfe; }
+    .dropdown-trigger:disabled { cursor:not-allowed; opacity:.58; background:#f3f6f7; }
     .dropdown-caret { color:var(--blue); flex:none; }
     .dropdown-menu { position:absolute; z-index:20; top:calc(100% + 4px); left:0; width:max(100%,260px); max-height:300px; overflow:auto; padding:5px; border:1px solid #b9c8d0; border-radius:10px; background:white; box-shadow:0 10px 28px #12212a24; }
     .dropdown-option { display:block; width:100%; padding:9px 10px; border:0; border-radius:6px; background:white; color:var(--ink); text-align:left; font:inherit; cursor:pointer; }
@@ -123,7 +124,10 @@
   const $ = id => document.getElementById(id);
   let floatValue='', byteValue='A5', stateValue='0';
   const defaultBoardNames=Array.from({length:16},(_,i)=>`基板 ${i}`);
-  const defaultInstanceNames=['左前（FL）','右前（FR）','左後（RL）','右後（RR）',...Array.from({length:12},(_,i)=>`個体 ${i+4}`)];
+  const legacyDefaultInstanceNames=['左前（FL）','右前（FR）','左後（RL）','右後（RR）',...Array.from({length:12},(_,i)=>`個体 ${i+4}`)];
+  const defaultInstanceNames=Array.from({length:16},(_,i)=>`個体 ${i}`);
+  const normalizeInstanceLabels=labels=>labels.map((label,index)=>String(label)===legacyDefaultInstanceNames[index]?`個体 ${index}`:String(label));
+  const normalizeInstanceNameMap=map=>Object.fromEntries(Object.entries(map||{}).map(([key,labels])=>[key,Array.isArray(labels)?normalizeInstanceLabels(labels):labels]));
   const storageKey='can-id-gui-labels-v1';
   const configApiUrl='https://can-id-guide.adoreddisc16.chatgpt.site/api/config';
   let names={board:[...defaultBoardNames],instance:[...defaultInstanceNames]};
@@ -135,8 +139,8 @@
     const local=JSON.parse(localStorage.getItem(storageKey)||'null');
     const saved=shared||local;
     const savedNames=saved?.names||saved;
-    if(savedNames&&Array.isArray(savedNames.board)&&savedNames.board.length===16&&Array.isArray(savedNames.instance)&&savedNames.instance.length===16) names={board:savedNames.board.map(String),instance:savedNames.instance.map(String)};
-    if(saved?.instanceNames&&typeof saved.instanceNames==='object')instanceNames=saved.instanceNames;
+    if(savedNames&&Array.isArray(savedNames.board)&&savedNames.board.length===16&&Array.isArray(savedNames.instance)&&savedNames.instance.length===16) names={board:savedNames.board.map(String),instance:normalizeInstanceLabels(savedNames.instance)};
+    if(saved?.instanceNames&&typeof saved.instanceNames==='object')instanceNames=normalizeInstanceNameMap(saved.instanceNames);
     if(saved?.deviceNames&&typeof saved.deviceNames==='object')deviceNames=saved.deviceNames;
     if(Array.isArray(saved?.customDevices))customDevices=saved.customDevices;
     if(saved?.customLabels&&typeof saved.customLabels==='object')customLabels=saved.customLabels;
@@ -196,6 +200,8 @@
   }
   function syncDropdown(select) {
     const ui=dropdowns.get(select.id);if(!ui)return;
+    ui.trigger.disabled=select.disabled;
+    if(select.disabled){ui.menu.hidden=true;ui.trigger.setAttribute('aria-expanded','false');}
     const selected=[...select.options].find(o=>o.value===select.value);
     ui.trigger.querySelector('.dropdown-value').textContent=selected?optionCaption(select.id,selected):'選択してください';
     ui.menu.replaceChildren();
@@ -221,9 +227,9 @@
       input=document.createElement('input');input.type='text';input.maxLength=32;input.setAttribute('aria-label','選択肢の表示名');
       const save=document.createElement('button');save.type='button';save.textContent='保存';
       const cancel=document.createElement('button');cancel.type='button';cancel.className='secondary';cancel.textContent='閉じる';
-      edit.addEventListener('click',()=>{if(!select.value){$('cloudStatus').textContent='先に番号を選択してください。';return;}editor.classList.toggle('hidden');input.value=select.id==='board'?names.board[Number(select.value)]:select.id==='instance'?instanceNameList()[Number(select.value)]:displayDeviceName(select.value);input.focus();});
+      edit.addEventListener('click',()=>{if(select.value===''){ $('cloudStatus').textContent='先に番号を選択してください。';return;}editor.classList.toggle('hidden');input.value=select.id==='board'?names.board[Number(select.value)]:select.id==='instance'?instanceNameList()[Number(select.value)]:displayDeviceName(select.value);input.focus();});
       save.addEventListener('click',()=>{
-        if(!select.value)return;const value=input.value.trim();if(!value){input.focus();return;}
+        if(select.value==='')return;const value=input.value.trim();if(!value){input.focus();return;}
         if(select.id==='board')names.board[Number(select.value)]=value;
         else if(select.id==='instance'){const key=instanceKey();if(!instanceNames[key])instanceNames[key]=[...names.instance];instanceNames[key][Number(select.value)]=value;}
         else {const custom=customDevices.find(x=>Number(x.v)===Number(select.value));if(custom)custom.name=value;else deviceNames[select.value]=value;}
@@ -285,13 +291,19 @@
     const p=Number(byId('priority').value), k=Number(byId('kind').value), d=Number(byId('device').value);
     return specs.ops.filter(o => (Array.isArray(o.kind)?o.kind.includes(k):o.kind===k) && o.priority===p && isOpAllowed(o,d));
   };
+  let lastInstanceKey='';
   function refreshOptions() {
     const oldKind=byId('kind').value, oldOp=byId('op').value;
     options(byId('kind'),compatibleKind());
     if ([...byId('kind').options].some(o=>o.value===oldKind)) byId('kind').value=oldKind;
     options(byId('board'),Array.from({length:16},(_,v)=>({v,n:`${v} — ${names.board[v]}`})));
     options(byId('device'),deviceChoices());
-    options(byId('instance'),Array.from({length:16},(_,v)=>({v,n:`${v} — ${instanceNameList()[v]}`})));
+    const instanceReady=byId('board').value!==''&&byId('device').value!=='';
+    const activeInstanceKey=instanceReady?instanceKey():'';
+    if(!instanceReady||activeInstanceKey!==lastInstanceKey)byId('instance').value='';
+    lastInstanceKey=activeInstanceKey;
+    byId('instance').disabled=!instanceReady;
+    options(byId('instance'),instanceReady?Array.from({length:16},(_,v)=>({v,n:`${v} — ${instanceNameList()[v]}`})):[],instanceReady?'選択してください':'先に基板とデバイスを選択');
     options(byId('op'),validOps());
     if ([...byId('op').options].some(o=>o.value===oldOp)) byId('op').value=oldOp;
   }
@@ -370,19 +382,20 @@
       if(payload.config){
         const config=payload.config;
         if(Array.isArray(config.board)&&config.board.length===16&&Array.isArray(config.instance)&&config.instance.length===16){
-          names={board:config.board.map(String),instance:config.instance.map(String)};instanceNames=config.instanceNames||{};deviceNames=config.deviceNames||{};customDevices=Array.isArray(config.customDevices)?config.customDevices:[];customLabels=config.customLabels||{};
+          names={board:config.board.map(String),instance:normalizeInstanceLabels(config.instance)};instanceNames=normalizeInstanceNameMap(config.instanceNames);deviceNames=config.deviceNames||{};customDevices=Array.isArray(config.customDevices)?config.customDevices:[];customLabels=config.customLabels||{};
+          if(JSON.stringify(config.instance)!==JSON.stringify(names.instance)||JSON.stringify(config.instanceNames||{})!==JSON.stringify(instanceNames))scheduleCloudSave();
           localStorage.setItem(storageKey,JSON.stringify(currentSettings()));render();
           $('cloudStatus').textContent='共有クラウドの最新設定を読み込みました。';return;
         }
       }
       const local=JSON.parse(localStorage.getItem(storageKey)||'null');
       if(local&&Array.isArray(local.board)&&Array.isArray(local.instance)){
-        names={board:local.board.map(String),instance:local.instance.map(String)};instanceNames=local.instanceNames||{};deviceNames=local.deviceNames||{};customDevices=Array.isArray(local.customDevices)?local.customDevices:[];customLabels=local.customLabels||{};render();scheduleCloudSave();
+        names={board:local.board.map(String),instance:normalizeInstanceLabels(local.instance)};instanceNames=normalizeInstanceNameMap(local.instanceNames);deviceNames=local.deviceNames||{};customDevices=Array.isArray(local.customDevices)?local.customDevices:[];customLabels=local.customLabels||{};render();scheduleCloudSave();
       }else $('cloudStatus').textContent='共有設定を準備しました。表示名を変更すると自動で共有されます。';
     } catch (_) { $('cloudStatus').textContent='共有クラウドに接続できません。端末内の保存設定で起動しました。'; }
   }
   for(const id of ['priority','kind','board','device','instance','op','version'])byId(id).addEventListener('change',render);
-  options(byId('priority'),specs.priority);options(byId('kind'),specs.kind);options(byId('board'),Array.from({length:16},(_,v)=>({v,n:`${v} — ${names.board[v]}`})));options(byId('device'),deviceChoices());options(byId('instance'),Array.from({length:16},(_,v)=>({v,n:`${v} — ${instanceNameList()[v]}`})));options(byId('op'),specs.ops);options(byId('version'),[{v:1,n:'1 — 現行仕様'}]);
+  options(byId('priority'),specs.priority);options(byId('kind'),specs.kind);options(byId('board'),Array.from({length:16},(_,v)=>({v,n:`${v} — ${names.board[v]}`})));options(byId('device'),deviceChoices());options(byId('instance'),[],'先に基板とデバイスを選択');byId('instance').disabled=true;options(byId('op'),specs.ops);options(byId('version'),[{v:1,n:'1 — 現行仕様'}]);
   for(const id of ['priority','kind','board','device','instance','op','version'])enhanceDropdown(byId(id));
   render();
   loadCloudSettings();
