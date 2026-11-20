@@ -31,7 +31,7 @@ jobs:
           cp index.html _site/index.html
           cp -R CAN通信関係 _site/CAN通信関係
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
           path: _site
       - name: Deploy to GitHub Pages
